@@ -22,7 +22,7 @@ else:
 pygame.init()
 
 # --- Constants ---
-WIDTH, HEIGHT = 700, 700
+WIDTH, HEIGHT = 704, 704
 SNAKE_SIZE = 32
 APPLE_SIZE = 22
 FPS = 10
@@ -77,16 +77,16 @@ theme = THEMES[theme_name]
 def get_theme_font(theme_name, size=36):
     font_file = THEMES[theme_name].get("font")
     if font_file:
-        font_path = os.path.join(
-            r"C:\Users\notye\OneDrive\Documents\Python Projects by me\snake-game\src\Fonts", font_file
-        )
+        # Use relative path for fonts
+        font_path = font_file
         try:
             if os.path.exists(font_path):
                 return pygame.font.Font(font_path, size)
             else:
-                print(f"Warning: Font file '{font_file}' not found. Using default font.")
+                print(f"Warning: Font file '{font_file}' not found in current directory. Using default font.")
                 return pygame.font.SysFont(None, size)
-        except Exception:
+        except Exception as e:
+            print(f"Error loading font '{font_file}': {e}")
             return pygame.font.SysFont(None, size)
     else:
         return pygame.font.SysFont(None, size)
@@ -114,18 +114,10 @@ def load_and_scale(path, size):
         print(f"Error loading image at '{path}': {e}")
         return pygame.Surface((size, size), pygame.SRCALPHA)  # Transparent fallback
 
-snake_head_img = load_and_scale(
-    r"C:\Users\notye\OneDrive\Documents\Python Projects by me\snake-game\src\assets\images\snake_head.png", SNAKE_SIZE
-)
-snake_body_img = load_and_scale(
-    r"C:\Users\notye\OneDrive\Documents\Python Projects by me\snake-game\src\assets\images\snake_body.png", SNAKE_SIZE
-)
-apple_img = load_and_scale(
-    r"C:\Users\notye\OneDrive\Documents\Python Projects by me\snake-game\src\assets\images\food.png", APPLE_SIZE
-)
-bomb_img = load_and_scale(
-    r"C:\Users\notye\OneDrive\Documents\Python Projects by me\snake-game\src\assets\images\Bomb.png", SNAKE_SIZE + 10
-)
+snake_head_img = load_and_scale("snake_head.png", SNAKE_SIZE)
+snake_body_img = load_and_scale("snake_body.png", SNAKE_SIZE)
+apple_img = load_and_scale("food.png", APPLE_SIZE)
+bomb_img = load_and_scale("Bomb.png", SNAKE_SIZE + 10)
 
 # --- Leaderboard Management ---
 LEADERBOARD_FILE = "survival_leaderboard.json"
@@ -142,6 +134,28 @@ def update_leaderboard(name, score, time_sec):
     leaderboard.append({"name": name, "score": score, "time": time_sec})
     leaderboard = sorted(leaderboard, key=lambda x: (-x["score"], x["time"]))[:10]
     save_leaderboard(leaderboard)
+
+def game_over_name_entry(score, survival_time):
+    name = ""
+    input_active = True
+    while input_active:
+        screen.fill(theme["bg"])
+        msg = font.render("Game Over! Enter Name:", True, theme["text"])
+        screen.blit(msg, (WIDTH//2 - msg.get_width()//2, HEIGHT//2 - 60))
+        name_label = font.render(name + "_", True, theme["text"])
+        screen.blit(name_label, (WIDTH//2 - name_label.get_width()//2, HEIGHT//2))
+        pygame.display.flip()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit(); exit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN and name:
+                    input_active = False
+                elif event.key == pygame.K_BACKSPACE:
+                    name = name[:-1]
+                elif event.unicode.isalnum() and len(name) < 10:
+                    name += event.unicode
+    update_leaderboard(name, score, survival_time)
 
 # --- Particle Effect ---
 particles = []
@@ -274,7 +288,8 @@ def settings_screen():
     global FPS, theme_name, theme, sound_on, font, WIDTH, HEIGHT, screen
     themes_list = list(THEMES.keys())
     theme_idx = themes_list.index(theme_name)
-    sizes = [(500, 500), (600, 600), (700, 700), (800, 600), (900, 700), (1000, 800)]
+    # Ensure all sizes are multiples of SNAKE_SIZE (32)
+    sizes = [(640, 640), (704, 704), (800, 640), (896, 704), (1024, 768)]
     size_idx = [i for i, s in enumerate(sizes) if s == (WIDTH, HEIGHT)]
     size_idx = size_idx[0] if size_idx else 2  # Default to 700x700
     options = [
@@ -352,8 +367,6 @@ def settings_screen():
                         if options[selected] == "Screen Size:":
                             WIDTH, HEIGHT = sizes[size_idx]
                             screen = pygame.display.set_mode((WIDTH, HEIGHT))
-                            global game_bg
-                            # game_bg = load_game_bg()  # Removed: load_game_bg is not defined
                         editing = False
                     elif event.key == pygame.K_ESCAPE:
                         editing = False
@@ -582,15 +595,21 @@ def draw_bomb(position):
     offset = (SNAKE_SIZE + 10 - SNAKE_SIZE) // 2
     screen.blit(bomb_img, (position[0] - offset, position[1] - offset))
 
-# --- Survival Mode ---
-def survival_mode():
+# --- Unified Game Play Function ---
+def play_game(mode="Normal"):
+    global FPS, WIDTH, HEIGHT, screen, font, theme
+    is_survival = (mode == "Survival")
     snake, direction, food_position, score = reset_game()
     running = True
     start_ticks = pygame.time.get_ticks()
+    last_milestone = 0
     particles = []
     bomb_position = None
     bomb_lifetime = 0
-    survival_time = 0
+
+    if not is_survival:
+        start_music()
+        high_score = load_high_score()
 
     def wrap_position(pos):
         return (pos[0] % WIDTH, pos[1] % HEIGHT)
@@ -612,6 +631,8 @@ def survival_mode():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit(); exit()
+            elif event.type == pygame.USEREVENT + 1 and not is_survival:
+                play_next_music()
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_UP and direction != (0, SNAKE_SIZE):
                     direction = (0, -SNAKE_SIZE)
@@ -623,95 +644,65 @@ def survival_mode():
                     direction = (SNAKE_SIZE, 0)
                 elif event.key == pygame.K_ESCAPE:
                     running = False
+                elif event.key == pygame.K_p and not is_survival:
+                    result = pause_screen()
+                    if result == "Return to Menu":
+                        running = False
+                        return
+                elif event.key == pygame.K_r and not is_survival:
+                    # Resume from pause if R pressed (handled in pause_screen too)
+                    pass
 
-        # Bomb logic: spawn new bomb if needed, decrement lifetime, remove if expired
-        if bomb_position is None or bomb_lifetime <= 0 or bomb_position == food_position or bomb_position in snake:
-            bomb_position = get_new_bomb_position(snake, food_position)
-            bomb_lifetime = random.randint(80, 160)
-        else:
-            bomb_lifetime -= 1
+        if is_survival:
+            if bomb_position is None or bomb_lifetime <= 0 or bomb_position == food_position or bomb_position in snake:
+                bomb_position = get_new_bomb_position(snake, food_position)
+                bomb_lifetime = random.randint(80, 160)
+            else:
+                bomb_lifetime -= 1
 
         new_head = wrap_position((snake[0][0] + direction[0], snake[0][1] + direction[1]))
 
-        # --- Bomb collision: snake dies if touches bomb ---
-        if is_on_bomb(new_head, bomb_position):
-            # Explosion particle effect
+        if is_survival and is_on_bomb(new_head, bomb_position):
             for _ in range(40):
-                particles.append(Particle(
-                    bomb_position[0] + SNAKE_SIZE // 2,
-                    bomb_position[1] + SNAKE_SIZE // 2,
-                    (255, 60, 0)
-                ))
+                particles.append(Particle(bomb_position[0] + SNAKE_SIZE // 2, bomb_position[1] + SNAKE_SIZE // 2, (255, 60, 0)))
             for _ in range(20):
                 screen.fill(theme["bg"])
-                draw_grid()
-                draw_snake(snake)
-                draw_food(food_position)
-                draw_bomb(bomb_position)
-                for p in particles:
-                    p.update()
-                    p.draw(screen)
+                draw_grid(); draw_snake(snake); draw_food(food_position); draw_bomb(bomb_position)
+                for p in particles: p.update(); p.draw(screen)
                 pygame.display.flip()
-                beep(1200, 40)
-                pygame.time.delay(30)
+                beep(1200, 40); pygame.time.delay(30)
             particles.clear()
-            survival_time = (pygame.time.get_ticks() - start_ticks) // 1000
-            name = ""
-            input_active = True
-            while input_active:
-                screen.fill(theme["bg"])
-                msg = font.render("Game Over! Enter Name:", True, theme["text"])
-                screen.blit(msg, (WIDTH//2 - msg.get_width()//2, HEIGHT//2 - 60))
-                name_label = font.render(name + "_", True, theme["text"])
-                screen.blit(name_label, (WIDTH//2 - name_label.get_width()//2, HEIGHT//2))
-                pygame.display.flip()
-                for event in pygame.event.get():
-                    if event.type == pygame.QUIT:
-                        pygame.quit(); exit()
-                    elif event.type == pygame.KEYDOWN:
-                        if event.key == pygame.K_RETURN and name:
-                            input_active = False
-                        elif event.key == pygame.K_BACKSPACE:
-                            name = name[:-1]
-                        elif event.unicode.isalnum() and len(name) < 10:
-                            name += event.unicode
-            update_leaderboard(name, score, survival_time)
+            game_over_name_entry(score, (pygame.time.get_ticks() - start_ticks) // 1000)
             return
 
-        # Usual wall/self collision
         if new_head in snake:
+            play_sound('gameover')
             particle_crash_effect(snake)
             time.sleep(0.5)
-            survival_time = (pygame.time.get_ticks() - start_ticks) // 1000
-            name = ""
-            input_active = True
-            while input_active:
-                screen.fill(theme["bg"])
-                msg = font.render("Game Over! Enter Name:", True, theme["text"])
-                screen.blit(msg, (WIDTH//2 - msg.get_width()//2, HEIGHT//2 - 60))
-                name_label = font.render(name + "_", True, theme["text"])
-                screen.blit(name_label, (WIDTH//2 - name_label.get_width()//2, HEIGHT//2))
-                pygame.display.flip()
-                for event in pygame.event.get():
-                    if event.type == pygame.QUIT:
-                        pygame.quit(); exit()
-                    elif event.type == pygame.KEYDOWN:
-                        if event.key == pygame.K_RETURN and name:
-                            input_active = False
-                        elif event.key == pygame.K_BACKSPACE:
-                            name = name[:-1]
-                        elif event.unicode.isalnum() and len(name) < 10:
-                            name += event.unicode
-            update_leaderboard(name, score, survival_time)
-            return
+            if is_survival:
+                game_over_name_entry(score, (pygame.time.get_ticks() - start_ticks) // 1000)
+                return
+            else:
+                if score > high_score:
+                    high_score = score
+                    save_high_score(high_score)
+                result = end_game_screen(score, high_score)
+                if result == "Play Again":
+                    snake, direction, food_position, score = reset_game()
+                    start_ticks = pygame.time.get_ticks()
+                    last_milestone = 0
+                    continue
+                else:
+                    running = False
+                    return
 
         snake.insert(0, new_head)
 
         if is_on_apple(snake[0], food_position):
             score += 10
             food_position = get_new_food_position(snake)
-            # Make sure bomb doesn't overlap with new food
-            if bomb_position == food_position:
+            play_sound('eat')
+            if is_survival and bomb_position == food_position:
                 bomb_position = get_new_bomb_position(snake, food_position)
         else:
             snake.pop()
@@ -720,19 +711,36 @@ def survival_mode():
         draw_grid()
         draw_snake(snake)
         draw_food(food_position)
-        if bomb_position:
+        if is_survival and bomb_position:
             draw_bomb(bomb_position)
+
         score_label = font.render(f"Score: {score}", True, theme["text"])
-        score_pos = (10, 10)
-        screen.blit(score_label, score_pos)
+        screen.blit(score_label, (10, 10))
         length_label = font.render(f"Length: {len(snake)}", True, theme["text"])
         screen.blit(length_label, (10, 40))
-        survival_time = (pygame.time.get_ticks() - start_ticks) // 1000
-        timer_label = font.render(f"Survival: {survival_time}s", True, theme["text"])
-        screen.blit(timer_label, (WIDTH - timer_label.get_width() - 20, 10))
+
+        if is_survival:
+            survival_time = (pygame.time.get_ticks() - start_ticks) // 1000
+            timer_label = font.render(f"Survival: {survival_time}s", True, theme["text"])
+            screen.blit(timer_label, (WIDTH - timer_label.get_width() - 20, 10))
+        else:
+            draw_timer(start_ticks)
+            if score > 0 and score % 100 == 0 and score != last_milestone:
+                score_pixel_animation(score, (110, 30), particles)
+                last_milestone = score
+
+        for p in particles[:]:
+            if p["life"] > 0:
+                pygame.draw.rect(screen, p["color"], (int(p["x"]), int(p["y"]), 5, 5))
+                p["x"] += p["vx"]; p["y"] += p["vy"]; p["life"] -= 1
+            else:
+                particles.remove(p)
 
         pygame.display.flip()
         clock.tick(FPS)
+
+def survival_mode():
+    play_game(mode="Survival")
 
 # --- Drawing Functions ---
 def draw_snake(snake):
@@ -859,7 +867,7 @@ def countdown():
         pygame.time.delay(800)
 
 # --- Background Music Playlist Setup ---
-MUSIC_DIR = r"C:\Users\notye\OneDrive\Documents\Python Projects by me\snake-game\src\assets\sounds\Music"
+MUSIC_DIR = os.path.join("assets", "sounds", "Music")
 music_files = []
 current_music_index = 0
 
@@ -929,112 +937,27 @@ def main():
     while True:
         choice = home_screen()
         if choice == "Play New Game":
-            snake, direction, food_position, score = reset_game()
+            play_game(mode="Normal")
             running = True
-            last_milestone = 0
-            particles = []
-            start_music()
-        elif choice == "Resume" and running:
-            pass
+        elif choice == "Resume":
+            if running:
+                play_game(mode="Normal")
+            else:
+                # If no game is running, just start a new one
+                play_game(mode="Normal")
+                running = True
         elif choice == "Help and Licensing":
             help_and_licensing_screen()
-            continue
         elif choice == "Settings":
             settings_screen()
-            continue
         elif choice == "Send us Feedback":
             feedback_screen()
-            continue
         elif choice == "Leaderboard":
             leaderboard_screen()
-            continue
         elif choice == "Challenges":
             challenges_screen()
-            continue
         elif choice == "Quit":
             pygame.quit(); exit()
-        else:
-            continue
-
-        start_ticks = pygame.time.get_ticks()
-
-        while running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit(); exit()
-                elif event.type == pygame.USEREVENT + 1:
-                    play_next_music()
-                elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_UP and direction != (0, SNAKE_SIZE):
-                        direction = (0, -SNAKE_SIZE)
-                    elif event.key == pygame.K_DOWN and direction != (0, -SNAKE_SIZE):
-                        direction = (0, SNAKE_SIZE)
-                    elif event.key == pygame.K_LEFT and direction != (SNAKE_SIZE, 0):
-                        direction = (-SNAKE_SIZE, 0)
-                    elif event.key == pygame.K_RIGHT and direction != (-SNAKE_SIZE, 0):
-                        direction = (SNAKE_SIZE, 0)
-                    elif event.key == pygame.K_ESCAPE:
-                        running = False
-                    elif event.key == pygame.K_p:
-                        result = pause_screen()
-                        if result == "Return to Menu":
-                            running = False
-                            break
-
-            new_head = wrap_position((snake[0][0] + direction[0], snake[0][1] + direction[1]))
-
-            if new_head in snake:
-                play_sound('gameover')
-                particle_crash_effect(snake)
-                time.sleep(0.5)
-                if score > high_score:
-                    high_score = score
-                    save_high_score(high_score)
-                result = end_game_screen(score, high_score)
-                if result == "Play Again":
-                    snake, direction, food_position, score = reset_game()
-                    start_ticks = pygame.time.get_ticks()
-                    last_milestone = 0
-                    continue
-                elif result == "Return to Menu":
-                    running = False
-                    break
-
-            snake.insert(0, new_head)
-
-            if is_on_apple(snake[0], food_position):
-                score += 10
-                food_position = get_new_food_position(snake)
-                play_sound('eat')
-            else:
-                snake.pop()
-
-            screen.fill(theme["bg"])
-            draw_grid()
-            draw_snake(snake)
-            draw_food(food_position)
-            score_label = font.render(f"Score: {score}", True, theme["text"])
-            score_pos = (10, 10)
-            screen.blit(score_label, score_pos)
-            length_label = font.render(f"Length: {len(snake)}", True, theme["text"])
-            screen.blit(length_label, (10, 40))
-            draw_timer(start_ticks)
-
-            if score > 0 and score % 100 == 0 and score != last_milestone:
-                score_pixel_animation(score, (score_pos[0] + 100, score_pos[1] + 20), particles)
-                last_milestone = score
-
-            for p in particles[:]:
-                if p["life"] > 0:
-                    pygame.draw.rect(screen, p["color"], (int(p["x"]), int(p["y"]), 5, 5))
-                    p["x"] += p["vx"]
-                    p["y"] += p["vy"]
-                    p["life"] -= 1
-                else:
-                    particles.remove(p)
-
-            pygame.display.flip()
-            clock.tick(FPS)
 
 if __name__ == "__main__":
     main()
