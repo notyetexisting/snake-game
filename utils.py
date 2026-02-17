@@ -1,3 +1,9 @@
+import pygame
+try:
+    import tkinter as t
+except ImportError:
+    t = None
+
 def load_image(file_path):
     """Load an image from the specified file path."""
     try:

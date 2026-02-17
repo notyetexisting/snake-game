@@ -9,7 +9,7 @@ import glob
 
 # Fix: Import winsound only on Windows, else use a dummy function
 if os.name == "nt":
-    import winsound
+    import winsound  # pylint: disable=import-error
     def beep(freq, dur):
         try:
             winsound.Beep(freq, dur)
@@ -20,6 +20,8 @@ else:
         pass
 
 pygame.init()
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # --- Constants ---
 WIDTH, HEIGHT = 704, 704
@@ -77,8 +79,7 @@ theme = THEMES[theme_name]
 def get_theme_font(theme_name, size=36):
     font_file = THEMES[theme_name].get("font")
     if font_file:
-        # Use relative path for fonts
-        font_path = font_file
+        font_path = os.path.join(BASE_DIR, font_file)
         try:
             if os.path.exists(font_path):
                 return pygame.font.Font(font_path, size)
@@ -114,10 +115,10 @@ def load_and_scale(path, size):
         print(f"Error loading image at '{path}': {e}")
         return pygame.Surface((size, size), pygame.SRCALPHA)  # Transparent fallback
 
-snake_head_img = load_and_scale("snake_head.png", SNAKE_SIZE)
-snake_body_img = load_and_scale("snake_body.png", SNAKE_SIZE)
-apple_img = load_and_scale("food.png", APPLE_SIZE)
-bomb_img = load_and_scale("Bomb.png", SNAKE_SIZE + 10)
+snake_head_img = load_and_scale(os.path.join(BASE_DIR, "snake_head.png"), SNAKE_SIZE)
+snake_body_img = load_and_scale(os.path.join(BASE_DIR, "snake_body.png"), SNAKE_SIZE)
+apple_img = load_and_scale(os.path.join(BASE_DIR, "food.png"), APPLE_SIZE)
+bomb_img = load_and_scale(os.path.join(BASE_DIR, "Bomb.png"), SNAKE_SIZE + 10)
 
 # --- Leaderboard Management ---
 LEADERBOARD_FILE = "survival_leaderboard.json"
@@ -159,33 +160,43 @@ def game_over_name_entry(score, survival_time):
 
 # --- Particle Effect ---
 particles = []
-class Particle:
-    def __init__(self, x, y, color):
-        self.x = x
-        self.y = y
-        angle = random.uniform(0, 2 * math.pi)
-        speed = random.uniform(2, 6)
-        self.vx = math.cos(angle) * speed
-        self.vy = math.sin(angle) * speed
-        self.life = random.randint(10, 20)
-        self.color = color
-    def update(self):
-        self.x += self.vx
-        self.y += self.vy
-        self.life -= 1
-    def draw(self, surface):
-        if self.life > 0:
-            pygame.draw.circle(surface, self.color, (int(self.x), int(self.y)), 4)
-def particle_crash_effect(snake):
+def create_particle(x, y, color):
+    angle = random.uniform(0, 2 * math.pi)
+    speed = random.uniform(2, 6)
+    return {
+        "x": x, "y": y,
+        "vx": math.cos(angle) * speed,
+        "vy": math.sin(angle) * speed,
+        "life": random.randint(10, 20),
+        "color": color
+    }
+
+def particle_crash_effect(snake, session=None):
     global particles
     for segment in snake:
         for _ in range(12):
-            particles.append(Particle(segment[0] + SNAKE_SIZE // 2, segment[1] + SNAKE_SIZE // 2, theme["snake"]))
+            particles.append(create_particle(segment[0] + SNAKE_SIZE // 2, segment[1] + SNAKE_SIZE // 2, theme["snake"]))
     for _ in range(20):
-        screen.fill(theme["bg"])
-        for p in particles:
-            p.update()
-            p.draw(screen)
+        offset_x = random.randint(-5, 5)
+        offset_y = random.randint(-5, 5)
+        temp_surf = pygame.Surface((WIDTH, HEIGHT))
+        temp_surf.fill(theme["bg"])
+        if session:
+            draw_grid(obstacles=session.obstacles, surface=temp_surf)
+            draw_snake(session.snake, surface=temp_surf)
+            if session.is_multiplayer: draw_snake(session.snake2, player=2, surface=temp_surf)
+            draw_food(session.food_position, surface=temp_surf)
+
+        for p in particles[:]:
+            if p["life"] > 0:
+                p["x"] += p["vx"]
+                p["y"] += p["vy"]
+                p["life"] -= 1
+                pygame.draw.circle(temp_surf, p["color"], (int(p["x"]), int(p["y"])), 4)
+            else:
+                particles.remove(p)
+        screen.fill((0, 0, 0))
+        screen.blit(temp_surf, (offset_x, offset_y))
         pygame.display.flip()
         beep(1000, 100)
     particles.clear()
@@ -250,14 +261,15 @@ def set_theme(new_theme_name):
 # --- Home Screen ---
 def home_screen():
     buttons = [
-        ("Resume", pygame.Rect(60, 120, 240, 50)),
-        ("Play New Game", pygame.Rect(60, 190, 240, 50)),
-        ("Challenges", pygame.Rect(60, 260, 240, 50)),
-        ("Leaderboard", pygame.Rect(60, 330, 240, 50)),
-        ("Settings", pygame.Rect(60, 400, 240, 50)),
-        ("Help and Licensing", pygame.Rect(60, 470, 240, 50)),
-        ("Send us Feedback", pygame.Rect(60, 540, 240, 50)),
-        ("Quit", pygame.Rect(60, 610, 240, 50)),
+        ("Resume", pygame.Rect(60, 100, 240, 50)),
+        ("Play New Game", pygame.Rect(60, 165, 240, 50)),
+        ("Multiplayer", pygame.Rect(60, 230, 240, 50)),
+        ("Challenges", pygame.Rect(60, 295, 240, 50)),
+        ("Leaderboard", pygame.Rect(60, 360, 240, 50)),
+        ("Settings", pygame.Rect(60, 425, 240, 50)),
+        ("Help and Licensing", pygame.Rect(60, 490, 240, 50)),
+        ("Send us Feedback", pygame.Rect(60, 555, 240, 50)),
+        ("Quit", pygame.Rect(60, 620, 240, 50)),
     ]
     selected = 1
     while True:
@@ -472,8 +484,10 @@ def leaderboard_screen():
 # --- Challenges Screen ---
 def challenges_screen():
     buttons = [
-        ("Survival Mode", pygame.Rect(WIDTH//2-120, 220, 240, 60)),
-        ("Back", pygame.Rect(WIDTH//2-120, 320, 240, 60)),
+        ("Survival Mode", pygame.Rect(WIDTH//2-120, 180, 240, 60)),
+        ("Walls of Doom", pygame.Rect(WIDTH//2-120, 260, 240, 60)),
+        ("Speed Run", pygame.Rect(WIDTH//2-120, 340, 240, 60)),
+        ("Back", pygame.Rect(WIDTH//2-120, 420, 240, 60)),
     ]
     selected = 0
     while True:
@@ -487,20 +501,16 @@ def challenges_screen():
             if event.type == pygame.QUIT:
                 pygame.quit(); exit()
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_UP or event.key == pygame.K_DOWN:
-                    selected = 1 - selected
+                if event.key == pygame.K_UP:
+                    selected = (selected - 1) % len(buttons)
+                elif event.key == pygame.K_DOWN:
+                    selected = (selected + 1) % len(buttons)
                 elif event.key == pygame.K_RETURN:
-                    if buttons[selected][0] == "Survival Mode":
-                        survival_mode()
-                    elif buttons[selected][0] == "Back":
-                        return
+                    return buttons[selected][0]
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 for i, (text, rect) in enumerate(buttons):
                     if rect.collidepoint(event.pos):
-                        if text == "Survival Mode":
-                            survival_mode()
-                        elif text == "Back":
-                            return
+                        return text
 
 # --- Pause Screen ---
 def pause_screen():
@@ -590,26 +600,37 @@ def startup_screen():
                     show = False
                     break
 
-# --- Bomb Logic ---
-def draw_bomb(position):
-    offset = (SNAKE_SIZE + 10 - SNAKE_SIZE) // 2
-    screen.blit(bomb_img, (position[0] - offset, position[1] - offset))
-
 # --- Unified Game Play Function ---
-def play_game(mode="Normal"):
+def play_game(session):
     global FPS, WIDTH, HEIGHT, screen, font, theme
+    mode = session.mode
     is_survival = (mode == "Survival")
-    snake, direction, food_position, score = reset_game()
-    running = True
-    start_ticks = pygame.time.get_ticks()
-    last_milestone = 0
-    particles = []
-    bomb_position = None
-    bomb_lifetime = 0
 
+    if session.paused_at > 0:
+        session.total_paused_time += (pygame.time.get_ticks() - session.paused_at)
+        session.paused_at = 0
+
+    high_score = 0
     if not is_survival:
-        start_music()
+        if not pygame.mixer.music.get_busy():
+            start_music()
         high_score = load_high_score()
+
+    snake = session.snake
+    direction = session.direction
+    food_position = session.food_position
+    score = session.score
+
+    snake2 = session.snake2
+    direction2 = session.direction2
+    score2 = session.score2
+
+    start_ticks = session.start_ticks
+    last_milestone = session.last_milestone
+    particles = session.particles
+    bomb_position = session.bomb_position
+    bomb_lifetime = session.bomb_lifetime
+    running = True
 
     def wrap_position(pos):
         return (pos[0] % WIDTH, pos[1] % HEIGHT)
@@ -628,12 +649,14 @@ def play_game(mode="Normal"):
                 return pos
 
     while running:
+        new_head2 = None
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit(); exit()
             elif event.type == pygame.USEREVENT + 1 and not is_survival:
                 play_next_music()
             elif event.type == pygame.KEYDOWN:
+                # Player 1 Controls
                 if event.key == pygame.K_UP and direction != (0, SNAKE_SIZE):
                     direction = (0, -SNAKE_SIZE)
                 elif event.key == pygame.K_DOWN and direction != (0, -SNAKE_SIZE):
@@ -642,12 +665,44 @@ def play_game(mode="Normal"):
                     direction = (-SNAKE_SIZE, 0)
                 elif event.key == pygame.K_RIGHT and direction != (-SNAKE_SIZE, 0):
                     direction = (SNAKE_SIZE, 0)
+
+                # Player 2 Controls
+                if session.is_multiplayer:
+                    if event.key == pygame.K_w and direction2 != (0, SNAKE_SIZE):
+                        direction2 = (0, -SNAKE_SIZE)
+                    elif event.key == pygame.K_s and direction2 != (0, -SNAKE_SIZE):
+                        direction2 = (0, SNAKE_SIZE)
+                    elif event.key == pygame.K_a and direction2 != (SNAKE_SIZE, 0):
+                        direction2 = (-SNAKE_SIZE, 0)
+                    elif event.key == pygame.K_d and direction2 != (-SNAKE_SIZE, 0):
+                        direction2 = (SNAKE_SIZE, 0)
+
                 elif event.key == pygame.K_ESCAPE:
                     running = False
+                    session.paused_at = pygame.time.get_ticks()
+                    session.snake = snake
+                    session.direction = direction
+                    session.food_position = food_position
+                    session.score = score
+                    session.last_milestone = last_milestone
+                    session.particles = particles
+                    session.bomb_position = bomb_position
+                    session.bomb_lifetime = bomb_lifetime
                 elif event.key == pygame.K_p and not is_survival:
+                    pause_start = pygame.time.get_ticks()
                     result = pause_screen()
+                    session.total_paused_time += (pygame.time.get_ticks() - pause_start)
                     if result == "Return to Menu":
                         running = False
+                        session.paused_at = pygame.time.get_ticks()
+                        session.snake = snake
+                        session.direction = direction
+                        session.food_position = food_position
+                        session.score = score
+                        session.last_milestone = last_milestone
+                        session.particles = particles
+                        session.bomb_position = bomb_position
+                        session.bomb_lifetime = bomb_lifetime
                         return
                 elif event.key == pygame.K_r and not is_survival:
                     # Resume from pause if R pressed (handled in pause_screen too)
@@ -661,70 +716,167 @@ def play_game(mode="Normal"):
                 bomb_lifetime -= 1
 
         new_head = wrap_position((snake[0][0] + direction[0], snake[0][1] + direction[1]))
+        if session.is_multiplayer:
+            new_head2 = wrap_position((snake2[0][0] + direction2[0], snake2[0][1] + direction2[1]))
+
+        # Obstacle collision
+        if new_head in session.obstacles:
+            play_sound('gameover')
+            particle_crash_effect(snake, session=session)
+            running = False
+            continue
+        if session.is_multiplayer and new_head2 in session.obstacles:
+            play_sound('gameover')
+            particle_crash_effect(snake2, session=session)
+            running = False
+            continue
 
         if is_survival and is_on_bomb(new_head, bomb_position):
             for _ in range(40):
-                particles.append(Particle(bomb_position[0] + SNAKE_SIZE // 2, bomb_position[1] + SNAKE_SIZE // 2, (255, 60, 0)))
+                particles.append(create_particle(bomb_position[0] + SNAKE_SIZE // 2, bomb_position[1] + SNAKE_SIZE // 2, (255, 60, 0)))
             for _ in range(20):
-                screen.fill(theme["bg"])
-                draw_grid(); draw_snake(snake); draw_food(food_position); draw_bomb(bomb_position)
-                for p in particles: p.update(); p.draw(screen)
+                offset_x = random.randint(-8, 8)
+                offset_y = random.randint(-8, 8)
+                temp_surf = pygame.Surface((WIDTH, HEIGHT))
+                temp_surf.fill(theme["bg"])
+                draw_grid(obstacles=session.obstacles); draw_snake(snake); draw_food(food_position); draw_bomb(bomb_position)
+                for p in particles[:]:
+                    if p["life"] > 0:
+                        p["x"] += p["vx"]; p["y"] += p["vy"]; p["life"] -= 1
+                        pygame.draw.circle(temp_surf, p["color"], (int(p["x"]), int(p["y"])), 4)
+                    else:
+                        particles.remove(p)
+                screen.fill((0, 0, 0))
+                screen.blit(temp_surf, (offset_x, offset_y))
                 pygame.display.flip()
                 beep(1200, 40); pygame.time.delay(30)
             particles.clear()
             game_over_name_entry(score, (pygame.time.get_ticks() - start_ticks) // 1000)
             return
 
-        if new_head in snake:
+        # Player 1 Collisions
+        if new_head in snake or (session.is_multiplayer and new_head in snake2):
             play_sound('gameover')
-            particle_crash_effect(snake)
-            time.sleep(0.5)
+            particle_crash_effect(snake, session=session)
             if is_survival:
-                game_over_name_entry(score, (pygame.time.get_ticks() - start_ticks) // 1000)
+                game_over_name_entry(score, (pygame.time.get_ticks() - start_ticks - session.total_paused_time) // 1000)
                 return
+            elif session.is_multiplayer:
+                result = end_game_screen(score, score2) # Reuse end_game_screen to show scores
+                if result == "Play Again":
+                    session.snake, session.direction, session.food_position, session.score = reset_game()
+                    session.snake2 = [(WIDTH // 2, HEIGHT // 2 + SNAKE_SIZE * 2)]
+                    session.direction2 = (0, SNAKE_SIZE)
+                    session.score2 = 0
+                    snake, direction, food_position, score = session.snake, session.direction, session.food_position, session.score
+                    snake2, direction2, score2 = session.snake2, session.direction2, session.score2
+                    start_ticks = pygame.time.get_ticks()
+                    session.total_paused_time = 0
+                    continue
+                else: return
             else:
-                if score > high_score:
-                    high_score = score
-                    save_high_score(high_score)
+                if score > high_score: save_high_score(score)
                 result = end_game_screen(score, high_score)
                 if result == "Play Again":
                     snake, direction, food_position, score = reset_game()
                     start_ticks = pygame.time.get_ticks()
+                    session.total_paused_time = 0
                     last_milestone = 0
                     continue
-                else:
-                    running = False
-                    return
+                else: return
+
+        # Player 2 Collisions
+        if session.is_multiplayer and (new_head2 in snake2 or new_head2 in snake):
+            play_sound('gameover')
+            particle_crash_effect(snake2, session=session)
+            result = end_game_screen(score, score2)
+            if result == "Play Again":
+                session.snake, session.direction, session.food_position, session.score = reset_game()
+                session.snake2 = [(WIDTH // 2, HEIGHT // 2 + SNAKE_SIZE * 2)]
+                session.direction2 = (0, SNAKE_SIZE)
+                session.score2 = 0
+                snake, direction, food_position, score = session.snake, session.direction, session.food_position, session.score
+                snake2, direction2, score2 = session.snake2, session.direction2, session.score2
+                start_ticks = pygame.time.get_ticks()
+                session.total_paused_time = 0
+                continue
+            else: return
 
         snake.insert(0, new_head)
+        if session.is_multiplayer: snake2.insert(0, new_head2)
 
-        if is_on_apple(snake[0], food_position):
-            score += 10
-            food_position = get_new_food_position(snake)
+        # Eating Food
+        ate_p1 = is_on_apple(snake[0], food_position)
+        ate_p2 = session.is_multiplayer and is_on_apple(snake2[0], food_position)
+
+        if ate_p1 or ate_p2:
+            now = pygame.time.get_ticks()
+            if now - session.last_eat_time < 3000:
+                session.multiplier = min(session.multiplier + 1, 5)
+            else:
+                session.multiplier = 1
+            session.last_eat_time = now
+
+            if ate_p1: score += 10 * session.multiplier
+            else: score2 += 10 * session.multiplier
+
+            # Use all snake segments for new food pos
+            all_segments = snake + (snake2 if session.is_multiplayer else [])
+            food_position = get_new_food_position(all_segments)
             play_sound('eat')
             if is_survival and bomb_position == food_position:
-                bomb_position = get_new_bomb_position(snake, food_position)
+                bomb_position = get_new_bomb_position(all_segments, food_position)
+
+            # Animation for eating
+            for _ in range(15):
+                particles.append(create_particle(food_position[0], food_position[1], theme["food"]))
         else:
             snake.pop()
+            if session.is_multiplayer: snake2.pop()
 
         screen.fill(theme["bg"])
-        draw_grid()
-        draw_snake(snake)
-        draw_food(food_position)
+        draw_grid(obstacles=session.obstacles)
+        draw_snake(snake, player=1, multiplier=session.multiplier)
+        if session.is_multiplayer: draw_snake(snake2, player=2, multiplier=session.multiplier)
+
+        pulse = math.sin(pygame.time.get_ticks() / 200) * 4
+        draw_food(food_position, pulse=pulse)
         if is_survival and bomb_position:
             draw_bomb(bomb_position)
 
-        score_label = font.render(f"Score: {score}", True, theme["text"])
+        score_label = font.render(f"P1 Score: {score}", True, theme["text"])
         screen.blit(score_label, (10, 10))
-        length_label = font.render(f"Length: {len(snake)}", True, theme["text"])
-        screen.blit(length_label, (10, 40))
+        if session.is_multiplayer:
+            score_label2 = font.render(f"P2 Score: {score2}", True, (100, 255, 255))
+            screen.blit(score_label2, (10, 40))
+            mult_label = font.render(f"Multiplier: x{session.multiplier}", True, theme["text"])
+            screen.blit(mult_label, (10, 70))
+        else:
+            length_label = font.render(f"Length: {len(snake)}", True, theme["text"])
+            screen.blit(length_label, (10, 40))
+            if session.multiplier > 1:
+                mult_label = font.render(f"Multiplier: x{session.multiplier}", True, (255, 255, 0))
+                screen.blit(mult_label, (10, 70))
 
         if is_survival:
-            survival_time = (pygame.time.get_ticks() - start_ticks) // 1000
+            survival_time = (pygame.time.get_ticks() - start_ticks - session.total_paused_time) // 1000
             timer_label = font.render(f"Survival: {survival_time}s", True, theme["text"])
             screen.blit(timer_label, (WIDTH - timer_label.get_width() - 20, 10))
+        elif session.mode == "Speed Run":
+            remaining = (session.game_duration - (pygame.time.get_ticks() - start_ticks - session.total_paused_time)) // 1000
+            if remaining <= 0:
+                running = False
+                end_game_screen(score, high_score)
+                return
+            timer_label = font.render(f"Time: {remaining}s", True, (255, 100, 100))
+            screen.blit(timer_label, (WIDTH - timer_label.get_width() - 20, 10))
         else:
-            draw_timer(start_ticks)
+            # For Normal mode, draw_timer needs to account for paused time too
+            elapsed = (pygame.time.get_ticks() - start_ticks - session.total_paused_time) // 1000
+            mins = elapsed // 60
+            secs = elapsed % 60
+            timer_label = font.render(f"Time: {mins:02}:{secs:02}", True, theme["text"])
+            screen.blit(timer_label, (WIDTH - timer_label.get_width() - 20, 10))
             if score > 0 and score % 100 == 0 and score != last_milestone:
                 score_pixel_animation(score, (110, 30), particles)
                 last_milestone = score
@@ -736,32 +888,66 @@ def play_game(mode="Normal"):
             else:
                 particles.remove(p)
 
+        # Update session state for persistence
+        session.snake = snake
+        session.direction = direction
+        session.score = score
+        if session.is_multiplayer:
+            session.snake2 = snake2
+            session.direction2 = direction2
+            session.score2 = score2
+        session.food_position = food_position
+        session.bomb_position = bomb_position
+        session.bomb_lifetime = bomb_lifetime
+
         pygame.display.flip()
         clock.tick(FPS)
 
-def survival_mode():
-    play_game(mode="Survival")
 
 # --- Drawing Functions ---
-def draw_snake(snake):
+def draw_snake(snake, player=1, multiplier=1, surface=None):
+    if surface is None: surface = screen
     for i, segment in enumerate(snake):
-        img = snake_head_img if i == 0 else snake_body_img
+        if player == 1:
+            img = snake_head_img if i == 0 else snake_body_img
+            if multiplier > 1:
+                # Tint based on multiplier
+                tint = (min(255, 200 + multiplier*10), 255 - min(255, multiplier*40), 255 - min(255, multiplier*40))
+                img = img.copy()
+                img.fill(tint, special_flags=pygame.BLEND_RGB_MULT)
+        else:
+            # Simple tint for Player 2 (Cyan-ish)
+            img = snake_head_img.copy() if i == 0 else snake_body_img.copy()
+            img.fill((100, 255, 255), special_flags=pygame.BLEND_RGB_MULT)
         screen.blit(img, segment)
 
-def draw_food(position):
+def draw_food(position, pulse=0, surface=None):
+    if surface is None: surface = screen
     offset = (SNAKE_SIZE - APPLE_SIZE) // 2
-    screen.blit(apple_img, (position[0] + offset, position[1] + offset))
+    if pulse != 0:
+        size = int(APPLE_SIZE + pulse)
+        img = pygame.transform.smoothscale(apple_img, (max(1, size), max(1, size)))
+        new_offset = (SNAKE_SIZE - size) // 2
+        screen.blit(img, (position[0] + new_offset, position[1] + new_offset))
+    else:
+        screen.blit(apple_img, (position[0] + offset, position[1] + offset))
 
-def draw_bomb(position):
+def draw_bomb(position, surface=None):
+    if surface is None: surface = screen
     offset = (SNAKE_SIZE + 10 - SNAKE_SIZE) // 2
-    screen.blit(bomb_img, (position[0] - offset, position[1] - offset))
+    surface.blit(bomb_img, (position[0] - offset, position[1] - offset))
 
-def draw_grid():
+def draw_grid(obstacles=None, surface=None):
+    if surface is None: surface = screen
     grid_color = (50, 50, 80)
     for x in range(0, WIDTH, SNAKE_SIZE):
-        pygame.draw.line(screen, grid_color, (x, 0), (x, HEIGHT))
+        pygame.draw.line(surface, grid_color, (x, 0), (x, HEIGHT))
     for y in range(0, HEIGHT, SNAKE_SIZE):
-        pygame.draw.line(screen, grid_color, (0, y), (WIDTH, y))
+        pygame.draw.line(surface, grid_color, (0, y), (WIDTH, y))
+
+    if obstacles:
+        for obs in obstacles:
+            pygame.draw.rect(surface, (150, 150, 150), (obs[0]+2, obs[1]+2, SNAKE_SIZE-4, SNAKE_SIZE-4), border_radius=4)
     scale = 0.25
     block = int(SNAKE_SIZE * scale)
     line1 = "SNAKE(X)"
@@ -773,10 +959,11 @@ def draw_grid():
     y_center = HEIGHT // 2
     y1 = y_center - block * 5
     y2 = y_center + block
-    draw_blocky_text_on_grid(line1, x1, y1, (60, 60, 120), scale=scale)
-    draw_blocky_text_on_grid(line2, x2, y2, (60, 60, 120), scale=scale)
+    draw_blocky_text_on_grid(line1, x1, y1, (60, 60, 120), scale=scale, surface=surface)
+    draw_blocky_text_on_grid(line2, x2, y2, (60, 60, 120), scale=scale, surface=surface)
 
-def draw_blocky_text_on_grid(message, start_x, start_y, color=(80, 80, 180), scale=0.5):
+def draw_blocky_text_on_grid(message, start_x, start_y, color=(80, 80, 180), scale=0.5, surface=None):
+    if surface is None: surface = screen
     font_map = {
         "A": ["01110","10001","11111","10001","10001"],
         "E": ["11111","10000","11110","10000","11111"],
@@ -808,12 +995,51 @@ def draw_blocky_text_on_grid(message, start_x, start_y, color=(80, 80, 180), sca
                             y + row_idx * block,
                             block, block
                         )
-                        pygame.draw.rect(screen, color, rect)
+                        pygame.draw.rect(surface, color, rect)
             x += int(6 * block)
         else:
             x += int(6 * block)
 
 # --- Game Logic ---
+class GameSession:
+    def __init__(self, mode="Normal"):
+        self.mode = mode
+        self.snake, self.direction, self.food_position, self.score = reset_game()
+        self.is_multiplayer = (mode == "Multiplayer")
+        if self.is_multiplayer:
+            self.snake2 = [(WIDTH // 2, HEIGHT // 2 + SNAKE_SIZE * 2)]
+            self.direction2 = (0, SNAKE_SIZE)
+            self.score2 = 0
+        else:
+            self.snake2 = None
+            self.direction2 = None
+            self.score2 = 0
+        self.obstacles = []
+        if mode == "Walls":
+            self.generate_obstacles()
+        self.game_duration = 60000 if mode == "Speed Run" else 0
+        self.start_ticks = pygame.time.get_ticks()
+        self.last_milestone = 0
+        self.particles = []
+        self.bomb_position = None
+        self.bomb_lifetime = 0
+        self.paused_at = 0
+        self.total_paused_time = 0
+        self.multiplier = 1
+        self.last_eat_time = 0
+
+    def generate_obstacles(self):
+        self.obstacles = []
+        for _ in range(10):
+            while True:
+                pos = (
+                    random.randrange(0, WIDTH, SNAKE_SIZE),
+                    random.randrange(0, HEIGHT, SNAKE_SIZE)
+                )
+                if pos not in self.snake and pos != self.food_position:
+                    self.obstacles.append(pos)
+                    break
+
 def reset_game():
     snake = [(WIDTH // 2, HEIGHT // 2)]
     direction = (0, -SNAKE_SIZE)
@@ -867,7 +1093,7 @@ def countdown():
         pygame.time.delay(800)
 
 # --- Background Music Playlist Setup ---
-MUSIC_DIR = os.path.join("assets", "sounds", "Music")
+MUSIC_DIR = BASE_DIR
 music_files = []
 current_music_index = 0
 
@@ -911,41 +1137,23 @@ load_music_playlist()
 
 # --- Main Loop ---
 def main():
-    def wrap_position(pos):
-        return (pos[0] % WIDTH, pos[1] % HEIGHT)
-
-    def get_new_bomb_position(snake, food_position):
-        min_x = 0
-        max_x = WIDTH - SNAKE_SIZE
-        min_y = 0
-        max_y = HEIGHT - SNAKE_SIZE
-        while True:
-            pos = (
-                random.randrange(min_x, max_x + 1, SNAKE_SIZE),
-                random.randrange(min_y, max_y + 1, SNAKE_SIZE)
-            )
-            if pos not in snake and pos != food_position:
-                return pos
-
     startup_screen()
-    snake, direction, food_position, score = reset_game()
-    running = False
-    high_score = load_high_score()
-    last_milestone = 0
-    particles = []
+    current_session = None
 
     while True:
         choice = home_screen()
         if choice == "Play New Game":
-            play_game(mode="Normal")
-            running = True
+            current_session = GameSession(mode="Normal")
+            play_game(current_session)
+        elif choice == "Multiplayer":
+            current_session = GameSession(mode="Multiplayer")
+            play_game(current_session)
         elif choice == "Resume":
-            if running:
-                play_game(mode="Normal")
+            if current_session:
+                play_game(current_session)
             else:
-                # If no game is running, just start a new one
-                play_game(mode="Normal")
-                running = True
+                current_session = GameSession(mode="Normal")
+                play_game(current_session)
         elif choice == "Help and Licensing":
             help_and_licensing_screen()
         elif choice == "Settings":
@@ -955,7 +1163,16 @@ def main():
         elif choice == "Leaderboard":
             leaderboard_screen()
         elif choice == "Challenges":
-            challenges_screen()
+            res = challenges_screen()
+            if res == "Survival Mode":
+                current_session = GameSession(mode="Survival")
+                play_game(current_session)
+            elif res == "Walls of Doom":
+                current_session = GameSession(mode="Walls")
+                play_game(current_session)
+            elif res == "Speed Run":
+                current_session = GameSession(mode="Speed Run")
+                play_game(current_session)
         elif choice == "Quit":
             pygame.quit(); exit()
 
