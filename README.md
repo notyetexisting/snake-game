@@ -2,16 +2,16 @@
 
 Snake(X) is a feature-rich, polished version of the classic Snake game implemented in Python using Pygame. It offers multiple game modes, enhanced visuals, and a robust architecture designed for portability and fun.
 
-## 🚀 Key Features
+## Key Features
 
 - **Multiple Game Modes**: From the classic experience to high-stakes challenges.
 - **Enhanced Graphics**: Dynamic food pulse animations, score-based snake color shifting, and screen shake effects for collisions.
 - **Score Multiplier**: Rewards quick play! Eat food in quick succession to boost your score multiplier up to 5x.
 - **Multiplayer Support**: Play with a friend on the same keyboard.
 - **Cross-Platform**: Designed to run seamlessly on Windows, Linux, and macOS.
-- **Windows Installer**: Ready to be packaged as a standalone `.exe` for easy installation.
+- **Windows Installer**: Ready to be packaged as a standalone .exe for easy installation.
 
-## 🎮 Game Modes
+## Game Modes
 
 1. **Normal Mode**: The classic Snake experience. Grow as long as you can!
 2. **Survival Mode**: Avoid bombs that spawn randomly and disappear after a short time.
@@ -21,7 +21,7 @@ Snake(X) is a feature-rich, polished version of the classic Snake game implement
    - **Player 1**: Use Arrow Keys
    - **Player 2**: Use W, A, S, D Keys
 
-## 🛠️ Installation & Setup
+## Installation & Setup
 
 ### Prerequisites
 - Python 3.8 or higher
@@ -44,25 +44,29 @@ Snake(X) is a feature-rich, polished version of the classic Snake game implement
    python main.py
    ```
 
-## 📦 Building for Windows
+## Building for Windows
 
-Snake(X) comes with an `installer.cfg` for generating a standalone Windows installer using **Pynsist**.
+Snake(X) comes with configuration for generating standalone Windows installers using **Pynsist**.
 
 1. Install Pynsist and NSIS (Nullsoft Scriptable Install System).
-2. Run the following command:
+2. To build for x64 architecture:
    ```bash
-   pynsist installer.cfg
+   pynsist installer_x64.cfg
    ```
-3. The installer will be generated in the `build/nsis/` directory as `SnakeX_1.0.exe`.
+3. To build for x86 architecture:
+   ```bash
+   pynsist installer_x86.cfg
+   ```
+4. The installers will be generated in the `build/nsis/` directory.
 
-## 🛠️ Technical Improvements
+## Technical Improvements
 
 This project underwent a significant refactor to ensure high code quality:
 - **Portability**: All hardcoded absolute paths were replaced with base-directory relative paths.
 - **Grid Alignment**: Fixed a legacy issue where wrapping could cause the snake to misalign with the grid.
 - **Session Management**: Introduced a unified `GameSession` state to allow for seamless "Resume" functionality.
-- **CI/CD Ready**: Configured with a clean `.pylintrc` and `.gitignore`, maintaining a 10.0/10 rating on code quality.
+- **CI/CD Ready**: Configured with a clean .pylintrc and .gitignore, maintaining a 10.0/10 rating on code quality.
 
-## 📜 License
+## License
 
-Free for all to use! Built with ❤️ by Ahmed Sajid and improved for the community.
+Free for all to use! Built by Ahmed Sajid and improved for the community.
