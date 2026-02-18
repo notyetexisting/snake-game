@@ -148,7 +148,7 @@ def game_over_name_entry(score, survival_time):
         pygame.display.flip()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit(); exit()
+                pygame.quit(); sys.exit()
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RETURN and name:
                     input_active = False
@@ -282,7 +282,7 @@ def home_screen():
         pygame.display.flip()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit(); exit()
+                pygame.quit(); sys.exit()
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_UP:
                     selected = (selected - 1) % len(buttons)
@@ -340,7 +340,7 @@ def settings_screen():
         pygame.display.flip()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit(); exit()
+                pygame.quit(); sys.exit()
             elif event.type == pygame.KEYDOWN:
                 if not editing:
                     if event.key == pygame.K_UP:
@@ -405,7 +405,7 @@ def feedback_screen():
         pygame.display.flip()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit(); exit()
+                pygame.quit(); sys.exit()
             elif event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
                 return
 
@@ -443,7 +443,7 @@ def help_and_licensing_screen():
         pygame.display.flip()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit(); exit()
+                pygame.quit(); sys.exit()
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_DOWN:
                     scroll_offset = min(scroll_offset + line_height, max_offset)
@@ -499,7 +499,7 @@ def challenges_screen():
         pygame.display.flip()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit(); exit()
+                pygame.quit(); sys.exit()
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_UP:
                     selected = (selected - 1) % len(buttons)
@@ -530,7 +530,7 @@ def pause_screen():
         pygame.display.flip()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit(); exit()
+                pygame.quit(); sys.exit()
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_UP or event.key == pygame.K_DOWN:
                     selected = 1 - selected
@@ -563,7 +563,7 @@ def end_game_screen(score, high_score):
         pygame.display.flip()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit(); exit()
+                pygame.quit(); sys.exit()
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_UP or event.key == pygame.K_DOWN:
                     selected = 1 - selected
@@ -589,7 +589,7 @@ def startup_screen():
         pygame.display.flip()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit(); exit()
+                pygame.quit(); sys.exit()
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RETURN:
                     for alpha in range(0, 256, 16):
@@ -652,7 +652,7 @@ def play_game(session):
         new_head2 = None
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit(); exit()
+                pygame.quit(); sys.exit()
             elif event.type == pygame.USEREVENT + 1 and not is_survival:
                 play_next_music()
             elif event.type == pygame.KEYDOWN:
@@ -919,7 +919,7 @@ def draw_snake(snake, player=1, multiplier=1, surface=None):
             # Simple tint for Player 2 (Cyan-ish)
             img = snake_head_img.copy() if i == 0 else snake_body_img.copy()
             img.fill((100, 255, 255), special_flags=pygame.BLEND_RGB_MULT)
-        screen.blit(img, segment)
+        surface.blit(img, segment)
 
 def draw_food(position, pulse=0, surface=None):
     if surface is None: surface = screen
@@ -928,9 +928,9 @@ def draw_food(position, pulse=0, surface=None):
         size = int(APPLE_SIZE + pulse)
         img = pygame.transform.smoothscale(apple_img, (max(1, size), max(1, size)))
         new_offset = (SNAKE_SIZE - size) // 2
-        screen.blit(img, (position[0] + new_offset, position[1] + new_offset))
+        surface.blit(img, (position[0] + new_offset, position[1] + new_offset))
     else:
-        screen.blit(apple_img, (position[0] + offset, position[1] + offset))
+        surface.blit(apple_img, (position[0] + offset, position[1] + offset))
 
 def draw_bomb(position, surface=None):
     if surface is None: surface = screen
@@ -1174,7 +1174,7 @@ def main():
                 current_session = GameSession(mode="Speed Run")
                 play_game(current_session)
         elif choice == "Quit":
-            pygame.quit(); exit()
+            pygame.quit(); sys.exit()
 
 if __name__ == "__main__":
     main()
