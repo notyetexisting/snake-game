@@ -1,34 +1,25 @@
+import pygame
+
 def load_image(file_path):
-    """Load an image from the specified file path."""
+    """Load an image using pygame."""
     try:
-        image = t.PhotoImage(file=file_path)
-        return image
+        return pygame.image.load(file_path).convert_alpha()
     except Exception as e:
         print(f"Error loading image: {e}")
         return None
 
 def load_sound(file_path):
-    """Load a sound from the specified file path."""
+    """Load a sound using pygame."""
     try:
-        sound = pygame.mixer.Sound(file_path)
-        return sound
+        return pygame.mixer.Sound(file_path)
     except Exception as e:
         print(f"Error loading sound: {e}")
         return None
 
-def check_collision(obj1, obj2):
-    """Check for collision between two objects."""
-    return obj1.distance(obj2) < 20
+def check_collision(pos1, pos2, dist=20):
+    """Check for collision between two positions."""
+    return pygame.math.Vector2(pos1).distance_to(pos2) < dist
 
 def update_score(current_score, high_score):
     """Update the score and return the new high score if necessary."""
-    if current_score > high_score:
-        high_score = current_score
-    return high_score
-
-def reset_game(segments, score_display, high_score):
-    """Reset the game state after a game over."""
-    for segment in segments:
-        segment.goto(1000, 1000)
-    segments.clear()
-    return 0, high_score  # Reset score and return high score
+    return max(current_score, high_score)
