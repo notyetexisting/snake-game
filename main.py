@@ -751,7 +751,7 @@ def play_game(session):
                 pygame.display.flip()
                 beep(1200, 40); pygame.time.delay(30)
             particles.clear()
-            game_over_name_entry(score, (pygame.time.get_ticks() - start_ticks) // 1000)
+            game_over_name_entry(score, (pygame.time.get_ticks() - start_ticks - session.total_paused_time) // 1000)
             return
 
         # Player 1 Collisions

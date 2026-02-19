@@ -9,7 +9,6 @@ Snake(X) is a feature-rich, polished version of the classic Snake game implement
 - **Score Multiplier**: Rewards quick play! Eat food in quick succession to boost your score multiplier up to 5x.
 - **Multiplayer Support**: Play with a friend on the same keyboard.
 - **Cross-Platform**: Designed to run seamlessly on Windows, Linux, and macOS.
-- **Windows Installer**: Ready to be packaged as a standalone .exe for easy installation.
 
 ## Game Modes
 
@@ -44,27 +43,12 @@ Snake(X) is a feature-rich, polished version of the classic Snake game implement
    python main.py
    ```
 
-## Building for Windows
-
-Snake(X) comes with configuration for generating standalone Windows installers using **Pynsist**.
-
-1. Install Pynsist and NSIS (Nullsoft Scriptable Install System).
-2. To build for x64 architecture:
-   ```bash
-   pynsist installer_x64.cfg
-   ```
-3. To build for x86 architecture:
-   ```bash
-   pynsist installer_x86.cfg
-   ```
-4. The installers will be generated in the `build/nsis/` directory.
-
 ## Technical Improvements
 
 This project underwent a significant refactor to ensure high code quality:
 - **Portability**: All hardcoded absolute paths were replaced with base-directory relative paths.
 - **Grid Alignment**: Fixed a legacy issue where wrapping could cause the snake to misalign with the grid.
-- **Session Management**: Introduced a unified `GameSession` state to allow for seamless "Resume" functionality.
+- **Session Management**: Introduced a unified GameSession state to allow for seamless "Resume" functionality.
 - **CI/CD Ready**: Configured with a clean .pylintrc and .gitignore, maintaining a 10.0/10 rating on code quality.
 
 ## License
